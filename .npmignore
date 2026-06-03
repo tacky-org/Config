@@ -1,0 +1,6 @@
+# Purpose of this file: Ignore files and directories when publishing to npm.
+# Only the build folder, package.json, and README.md should be published.
+*
+!package.json
+!build/*
+!README.md
