@@ -1,4 +1,4 @@
-# @tacky-org/config
+# Tacky Config
 
 Config management for React apps — a thin `load → validate → map` pipeline that plugs directly into **TanStack Query**.
 
