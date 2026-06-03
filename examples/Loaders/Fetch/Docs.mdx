@@ -1,0 +1,31 @@
+import { Canvas, Meta } from "@storybook/addon-docs/blocks";
+import * as Stories from "./Fetch.stories";
+
+<Meta of={Stories} />
+
+# `fromFetch`
+
+Creates a `load` function that fetches a JSON endpoint and throws on non-2xx responses.
+
+```ts
+import { ConfigLoader, createConfigQuery, fromFetch } from '@tacky-org/config';
+
+const loader = ConfigLoader.create<RawConfig, AppConfig>({
+  load:     fromFetch('/api/config'),
+  validate: (raw) => raw as RawConfig,
+  map:      (raw) => ({ apiUrl: raw.api_url }),
+});
+
+export const appConfigQuery = createConfigQuery('app_config', loader);
+```
+
+With request options:
+
+```ts
+fromFetch('/api/config', {
+  headers:     { Authorization: `Bearer ${token}` },
+  errorPrefix: 'App config',   // prefix for the thrown error message
+})
+```
+
+<Canvas of={Stories.Standard} />

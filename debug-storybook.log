@@ -1,0 +1,35 @@
+[22:01:50.340] [INFO] storybook v10.4.2
+[22:01:51.461] [DEBUG] Getting package.json info for /Users/tactics/Work/gertvdb/React/Config/package.json...
+[22:01:52.345] [DEBUG] Serving static files from [36mpublic[39m at [36m/[39m
+[22:01:52.351] [INFO] Starting...
+[22:01:52.705] [DEBUG] Starting preview..
+[22:01:52.818] [WARN] 🚨 Unable to index ./examples/Loaders/Node/Docs.mdx:
+  Error: Invariant failed: Could not find or load CSF file at path "./Node.stories" referenced by `of={}` in docs file "examples/Loaders/Node/Docs.mdx".
+
+- Does that file exist?
+- If so, is it a CSF file (`.stories.*`)?
+- If so, is it matched by the `stories` glob in `main.js`?
+- If so, has the file successfully loaded in Storybook and are its stories visible?
+    at invariant (file:///Users/tactics/Work/gertvdb/React/Config/node_modules/storybook/dist/_node-chunks/chunk-O7TSSZXM.js:20:11)
+    at _StoryIndexGenerator.extractDocs (file:///Users/tactics/Work/gertvdb/React/Config/node_modules/storybook/dist/core-server/index.js:16731:13)
+    at async file:///Users/tactics/Work/gertvdb/React/Config/node_modules/storybook/dist/core-server/index.js:16581:39
+    at async Promise.all (index 2)
+    at async Promise.all (index 0)
+    at async _StoryIndexGenerator.updateExtracted (file:///Users/tactics/Work/gertvdb/React/Config/node_modules/storybook/dist/core-server/index.js:16569:5)
+    at async _StoryIndexGenerator.ensureExtracted (file:///Users/tactics/Work/gertvdb/React/Config/node_modules/storybook/dist/core-server/index.js:16606:8)
+    at async _StoryIndexGenerator.initialize (file:///Users/tactics/Work/gertvdb/React/Config/node_modules/storybook/dist/core-server/index.js:16565:5)
+    at async file:///Users/tactics/Work/gertvdb/React/Config/node_modules/storybook/dist/core-server/presets/common-preset.js:1694:10
+[22:01:52.824] [ERROR] Failed to build the preview
+[22:01:52.825] [ERROR] Error: Unable to index ./examples/Loaders/Node/Docs.mdx
+    at _StoryIndexGenerator.getIndexAndStats (file://./node_modules/storybook/dist/core-server/index.js:16835:15)
+    at async _StoryIndexGenerator.getIndex (file://./node_modules/storybook/dist/core-server/index.js:16824:13)
+    at async getOptimizeDeps (file://./node_modules/@storybook/builder-vite/dist/index.js:1862:15)
+    at async createViteServer (file://./node_modules/@storybook/builder-vite/dist/index.js:1888:19)
+    at async Module.start (file://./node_modules/@storybook/builder-vite/dist/index.js:1923:17)
+    at async storybookDevServer (file://./node_modules/storybook/dist/core-server/index.js:18917:158)
+    at async buildOrThrow (file://./node_modules/storybook/dist/core-server/index.js:8205:12)
+    at async buildDevStandalone (file://./node_modules/storybook/dist/core-server/index.js:19478:41)
+    at async withTelemetry (file://./node_modules/storybook/dist/_node-chunks/chunk-PU4IASEN.js:655:12)
+    at async dev (file://./node_modules/storybook/dist/bin/core.js:2735:3)
+[22:01:52.827] [WARN] Broken build, fix the error above.
+You may need to refresh the browser.

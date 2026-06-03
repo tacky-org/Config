@@ -1,0 +1,50 @@
+import { Canvas, Meta } from "@storybook/addon-docs/blocks";
+import * as Stories from "./WindowScript.stories";
+
+<Meta of={Stories} />
+
+# `fromWindow` + `fromScript`
+
+Two patterns for reading config the server has already embedded in the HTML —
+no extra network round-trip on the client.
+
+## `fromWindow(key)`
+
+The server writes config to a global before the app script loads.
+
+```html
+<script>window.__APP_CONFIG__ = { apiUrl: "https://api.example.com" };</script>
+```
+
+```ts
+fromWindow('__APP_CONFIG__')
+```
+
+## `fromScript(id)`
+
+The server embeds config in a `<script type="application/json">` tag.
+Avoids polluting the global scope and is unaffected by `script-src` CSP rules.
+
+```html
+<script id="app-config" type="application/json">{"apiUrl":"https://api.example.com"}</script>
+```
+
+```ts
+fromScript('app-config')
+```
+
+## When to use which
+
+<table>
+  <thead>
+    <tr><th></th><th><code>fromWindow</code></th><th><code>fromScript</code></th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Global scope pollution</td><td>Yes</td><td>No</td></tr>
+    <tr><td>Works before DOM ready</td><td>Yes</td><td>No — needs DOM</td></tr>
+    <tr><td>Readable in DevTools</td><td>As a JS variable</td><td>As an element</td></tr>
+    <tr><td>CSP <code>script-src</code> impact</td><td>Yes</td><td>No (not executable)</td></tr>
+  </tbody>
+</table>
+
+<Canvas of={Stories.Standard} />

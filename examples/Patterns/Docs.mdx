@@ -1,0 +1,59 @@
+import { Canvas, Meta } from "@storybook/addon-docs/blocks";
+import * as Stories from "./Patterns.stories";
+
+<Meta of={Stories} />
+
+# TanStack Query patterns
+
+`createConfigQuery` returns a standard TanStack `queryOptions` object.
+Every pattern that works with `useQuery` works here.
+
+## `useSuspenseQuery` — Suspense-driven
+
+`data` is always defined when the component renders.
+Wrap with `<Suspense>` and `<ErrorBoundary>` to handle loading and errors declaratively.
+
+```tsx
+const { data: config } = useSuspenseQuery(appConfigQuery);
+return <p>{config.apiUrl}</p>;
+```
+
+<Canvas of={Stories.Suspense} />
+
+## `useQuery` — inline loading states
+
+No `<Suspense>` or `<ErrorBoundary>` needed.
+Handle loading and errors inline, just like any `useQuery` call.
+
+```tsx
+const { data: config, isLoading, isError, error } = useQuery(appConfigQuery);
+if (isLoading) return <p>Loading…</p>;
+if (isError)   return <p>Error: {String(error)}</p>;
+return <p>{config!.apiUrl}</p>;
+```
+
+<Canvas of={Stories.Query} />
+
+## Error — network failure
+
+The error is caught by the nearest `<ErrorBoundary>`.
+
+<Canvas of={Stories.NetworkError} />
+
+## Error — validation failure
+
+If `validate` throws, the error propagates to TanStack and surfaces at the boundary.
+
+<Canvas of={Stories.ValidationError} />
+
+## Retry
+
+Use TanStack's built-in `refetch()` or `invalidateQueries()` — no custom retry logic needed.
+
+```tsx
+const { isError, refetch } = useQuery(appConfigQuery);
+// or
+queryClient.invalidateQueries(appConfigQuery);
+```
+
+<Canvas of={Stories.Retry} />

@@ -1,0 +1,61 @@
+import { Meta } from "@storybook/addon-docs/blocks";
+
+<Meta title="Loaders/Node (fromJsonFile · fromEnv · fromPublicEnv)" />
+
+# Node.js loaders
+
+These loaders run in Node.js only and cannot be demoed in the browser.
+
+## `fromJsonFile(path)`
+
+Reads and JSON-parses a file from the filesystem using `fs/promises`.
+
+```ts
+import { ConfigLoader, createConfigQuery, fromJsonFile, withZod } from '@tacky-org/config';
+
+const loader = ConfigLoader.create({
+  load:     fromJsonFile('./config/app.config.json'),
+  validate: withZod(AppConfigSchema),
+});
+
+export const appConfigQuery = createConfigQuery('app_config', loader);
+```
+
+`fromJsonFile` uses a dynamic `import('fs/promises')` so it tree-shakes cleanly
+out of browser bundles.
+
+## `fromEnv(keys)`
+
+Reads a specific set of env vars. Throws a single error listing **all** missing
+keys at once so you fix everything in one go.
+
+```ts
+import { fromEnv } from '@tacky-org/config';
+
+const loader = ConfigLoader.create({
+  load:     fromEnv(['API_URL', 'API_KEY', 'TIMEOUT_MS']),
+  validate: (raw) => raw as Record<string, string>,
+  map: (env) => ({
+    apiUrl:  env.API_URL,
+    apiKey:  env.API_KEY,
+    timeout: Number(env.TIMEOUT_MS),
+  }),
+});
+```
+
+## `fromPublicEnv(prefix)`
+
+Reads all env vars that start with a given prefix and strips the prefix from the keys.
+Works with `VITE_`, `NEXT_PUBLIC_`, or any custom convention.
+
+```ts
+import { fromPublicEnv } from '@tacky-org/config';
+
+// Given: VITE_API_URL=https://api.example.com  VITE_TIMEOUT=5000
+const loader = ConfigLoader.create({
+  load:     fromPublicEnv('VITE_'),
+  validate: (raw) => raw as { API_URL: string; TIMEOUT: string },
+  map: (env) => ({ apiUrl: env.API_URL, timeout: Number(env.TIMEOUT) }),
+});
+// Produces: { API_URL: 'https://api.example.com', TIMEOUT: '5000' }
+```

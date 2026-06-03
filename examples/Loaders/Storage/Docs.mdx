@@ -1,0 +1,36 @@
+import { Canvas, Meta } from "@storybook/addon-docs/blocks";
+import * as Stories from "./Storage.stories";
+
+<Meta of={Stories} />
+
+# `fromStorage`
+
+Reads and JSON-parses an entry from any [`Storage`](https://developer.mozilla.org/en-US/docs/Web/API/Storage) implementation.
+Pass `localStorage` or `sessionStorage` directly.
+
+```ts
+import { fromStorage } from '@tacky-org/config';
+
+// Persists across browser sessions
+fromStorage(localStorage, 'app_config')
+
+// Cleared when the tab closes
+fromStorage(sessionStorage, 'feature_flags')
+```
+
+Because the adapter accepts the `Storage` interface it also works with any polyfill or test stub:
+
+```ts
+const stub: Storage = {
+  getItem:    (k) => store.get(k) ?? null,
+  setItem:    (k, v) => store.set(k, v),
+  removeItem: (k) => store.delete(k),
+  clear:      () => store.clear(),
+  get length() { return store.size; },
+  key:        (i) => [...store.keys()][i] ?? null,
+};
+
+fromStorage(stub, 'app_config')
+```
+
+<Canvas of={Stories.Standard} />

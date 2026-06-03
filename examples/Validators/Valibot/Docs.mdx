@@ -1,0 +1,32 @@
+import { Canvas, Meta } from "@storybook/addon-docs/blocks";
+import * as Stories from "./Valibot.stories";
+
+<Meta of={Stories} />
+
+# `withValibot`
+
+Creates a `validate` function for use with Valibot.
+
+Valibot's API is `v.parse(schema, data)` rather than `schema.parse(data)`, so
+`withValibot` accepts a pre-bound `(data: unknown) => T` function instead of a
+schema object directly.
+
+```ts
+import * as v from 'valibot';
+import { withValibot } from '@tacky-org/config';
+
+const Schema = v.object({
+  host:   v.string(),
+  port:   v.number(),
+  secure: v.boolean(),
+});
+
+const loader = ConfigLoader.create({
+  load:     fromFetch('/api/config'),
+  validate: withValibot((data) => v.parse(Schema, data)),
+});
+```
+
+Throws Valibot's `ValiError` on failure, which TanStack surfaces as a query error.
+
+<Canvas of={Stories.Standard} />
