@@ -17,7 +17,10 @@ export interface FromFetchOptions extends RequestInit {
  *   validate: withZod(AppConfigSchema),
  * });
  */
-export function fromFetch(url: string, options: FromFetchOptions = {}): () => Promise<unknown> {
+export function fromFetch(
+  url: string,
+  options: FromFetchOptions = {},
+): () => Promise<unknown> {
   const { errorPrefix, ...init } = options;
   return () =>
     fetch(url, init).then((res) => {
@@ -80,7 +83,9 @@ export function fromWindow(key: string): () => unknown {
   return () => {
     const value = (window as unknown as Record<string, unknown>)[key];
     if (value === undefined) {
-      throw new Error(`window.${key} is not defined. Make sure the server embeds it before this script runs.`);
+      throw new Error(
+        `window.${key} is not defined. Make sure the server embeds it before this script runs.`,
+      );
     }
     return value;
   };

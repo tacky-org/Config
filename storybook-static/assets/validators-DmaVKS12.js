@@ -1,0 +1,1 @@
+function a(t){return r=>t.parse(r)}function e(t){return r=>t.validateSync(r)}function o(t){return r=>{const{error:n,value:i}=t.validate(r);if(n)throw n;return i}}function u(t){return r=>t(r)}export{u as a,e as b,a as c,o as w};

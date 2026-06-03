@@ -1,6 +1,7 @@
 import { ConfigLoaderOptions } from "../Types";
 
-const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+const wait = (ms: number) =>
+  new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 export class ConfigLoader<TConfig, TRuntime = TConfig> {
   private readonly options: ConfigLoaderOptions<TConfig, TRuntime>;
@@ -23,7 +24,9 @@ export class ConfigLoader<TConfig, TRuntime = TConfig> {
       try {
         const raw = await this.options.load();
         const config = this.options.validate(raw);
-        return this.options.map ? this.options.map(config) : (config as unknown as TRuntime);
+        return this.options.map
+          ? this.options.map(config)
+          : (config as unknown as TRuntime);
       } catch (err) {
         lastError = err;
         if (attempt < maxRetries) {

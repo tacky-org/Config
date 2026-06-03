@@ -39,4 +39,3 @@ export type ResolveConfig<
   K extends string,
   TFallback = unknown,
 > = K extends keyof ConfigRegistry ? ConfigRegistry[K] : TFallback;
-

@@ -1,6 +1,6 @@
 {
   "name": "@tacky-org/config",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Config management",
   "repository": {
     "url": "https://github.com/tacky-org/Config"
@@ -16,15 +16,15 @@
   },
   "type": "module",
   "scripts": {
+    "preinstall": "npx only-allow@1.2.2 pnpm",
     "prettify": "pnpm exec prettier --write src/.",
-    "dev": "pnpm exec storybook dev -p 6006 --debug",
-    "storybook": "pnpm exec storybook dev -p 6006",
+    "dev": "pnpm install && pnpm exec storybook dev -p 6006 --debug",
     "build-github": "pnpm run prettify && pnpm run test && pnpm exec tsc --noEmit && pnpm run build",
     "build": "pnpm run prettify && pnpm run test && pnpm exec tsup && pnpm exec storybook build",
-    "release:patch": "pnpm run build && pnpm version patch --git-tag-version=false",
-    "release:minor": "pnpm run build && pnpm version minor --git-tag-version=false",
-    "release:major": "pnpm run build && pnpm version major --git-tag-version=false",
-    "test": "NODE_OPTIONS=--experimental-vm-modules jest"
+    "release:patch": "pnpm install && pnpm run build && pnpm version patch --git-tag-version=false",
+    "release:minor": "pnpm install && pnpm run build && pnpm version minor --git-tag-version=false",
+    "release:major": "pnpm install && pnpm run build && pnpm version major --git-tag-version=false",
+    "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --passWithNoTests"
   },
   "engines": {
     "node": ">=20",
