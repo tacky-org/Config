@@ -8,6 +8,18 @@ const preview: Preview = {
         date: /Date$/i,
       },
     },
+    options: {
+      storySort: {
+        order: [
+          "Loader",   ["Memory", "Fetch"],
+          "Reading",
+          "Transforms",
+          "Errors",
+          "TanStack", ["Invalidate", "Prefetch"],
+          "Pattern",  ["App Structure"],
+        ],
+      },
+    },
   },
 };
 

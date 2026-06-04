@@ -1,0 +1,85 @@
+import { Canvas, Meta } from "@storybook/addon-docs/blocks";
+import * as Stories from "./Prefetch.stories";
+
+<Meta of={Stories} />
+
+# `prefetchConfig`
+
+Populates the TanStack Query cache before a component tree renders.
+When `useConfigSuspenseQuery` then runs, the data is already there —
+no Suspense fallback, no loading state.
+
+Uses `ensureQueryData` internally — if the config is already cached it returns
+immediately, so navigating back to a route costs nothing.
+
+---
+
+## `beforeLoad` vs `loader`
+
+Both receive `{ context: { queryClient } }` and work identically with `prefetchConfig`.
+
+<table>
+  <thead><tr><th></th><th><code>beforeLoad</code></th><th><code>loader</code></th></tr></thead>
+  <tbody>
+    <tr><td>Runs</td><td>Before route activates — top-down, in series</td><td>When route is about to render — in parallel with sibling loaders</td></tr>
+    <tr><td>Use for</td><td>Auth guards, redirects, context that child routes depend on</td><td>Data fetching — preferred for performance</td></tr>
+    <tr><td>Return value</td><td>Not used for data</td><td>Available via <code>Route.useLoaderData()</code></td></tr>
+  </tbody>
+</table>
+
+For config fetching, **`loader` is the right choice** — it runs in parallel with other loaders and doesn't block sibling routes.
+
+```ts
+export const Route = createFileRoute('/app')({
+  loader: ({ context: { queryClient } }) =>
+    prefetchConfig(appConfigLoader, queryClient),
+});
+```
+
+Multiple loaders in parallel:
+
+```ts
+loader: ({ context: { queryClient } }) =>
+  Promise.all([
+    prefetchConfig(appConfigLoader,    queryClient),
+    prefetchConfig(featureFlagsLoader, queryClient),
+  ]),
+```
+
+## Without prefetch
+
+The Suspense fallback shows until the config finishes loading (~800ms here).
+
+<Canvas of={Stories.Without} />
+
+## With `loader`
+
+`prefetchConfig` runs in the loader before the component tree mounts.
+By the time `useConfigSuspenseQuery` runs the data is already in the cache —
+the Suspense fallback never appears.
+
+<Canvas of={Stories.Loader} />
+
+## `loader` return value — `useLoaderData`
+
+`loader` can also *return* the prefetched config, making it available via
+`Route.useLoaderData()` alongside `useConfigSuspenseQuery`.
+Both read from the same cached value — no duplicate fetch.
+
+```ts
+export const Route = createFileRoute('/app')({
+  loader: async ({ context: { queryClient } }) => {
+    const config = await prefetchConfig(appConfigLoader, queryClient);
+    return { config };
+  },
+});
+
+// In the component — two ways to read the same data:
+const { config } = Route.useLoaderData();                     // direct, type-safe
+const { data: config } = useConfigSuspenseQuery(appConfigLoader); // works anywhere in the tree
+```
+
+Prefer `useConfigSuspenseQuery` for deeply nested components and `useLoaderData`
+when you want the data available at the route level without importing the loader.
+
+<Canvas of={Stories.LoaderData} />

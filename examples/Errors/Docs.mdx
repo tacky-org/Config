@@ -1,0 +1,62 @@
+import { Canvas, Meta } from "@storybook/addon-docs/blocks";
+import * as Stories from "./Errors.stories";
+
+<Meta of={Stories} />
+
+# Errors and `ConfigPipelineError`
+
+Every step of the load pipeline throws a `ConfigPipelineError` on failure.
+Catch it in an `<ErrorBoundary>` and inspect `error.step` to know exactly where it failed.
+
+<table>
+  <thead><tr><th>Step</th><th>When</th></tr></thead>
+  <tbody>
+    <tr><td><code>load</code></td><td>The load function threw — network failure, HTTP error, missing window global</td></tr>
+    <tr><td><code>validate</code></td><td>The <code>validate</code> function threw — response shape is wrong</td></tr>
+    <tr><td><code>map</code></td><td>The <code>map</code> function threw</td></tr>
+  </tbody>
+</table>
+
+```tsx
+import { ConfigPipelineError } from '@tacky-org/config';
+
+const fallback = (error: Error) => {
+  if (error instanceof ConfigPipelineError) {
+    return (
+      <div>
+        <p>Config failed at step: <strong>{error.step}</strong></p>
+        <p>{error.message}</p>
+      </div>
+    );
+  }
+  return <p>{error.message}</p>;
+};
+
+<ErrorBoundary fallback={fallback}>
+  <Suspense fallback={<p>Loading…</p>}>
+    <MyComponent />
+  </Suspense>
+</ErrorBoundary>
+```
+
+### Retries — `load` step only
+
+Only the `load` step is retried. `validate` and `map` failures throw immediately
+because they are deterministic — retrying would produce the same error.
+
+```ts
+ConfigLoader.create({
+  key:      'app_config',
+  load:     fromFetch('/api/config'),
+  validate: withZod(AppConfigSchema),
+  retries:  3,  // 200ms, 400ms, 800ms backoff
+});
+```
+
+## `load` step error — HTTP 404
+
+<Canvas of={Stories.Load} />
+
+## `validate` step error — wrong shape
+
+<Canvas of={Stories.Validate} />

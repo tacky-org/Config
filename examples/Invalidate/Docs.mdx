@@ -1,0 +1,82 @@
+import { Canvas, Meta } from "@storybook/addon-docs/blocks";
+import * as Stories from "./Invalidate.stories";
+
+<Meta of={Stories} />
+
+# Invalidating config
+
+Config is cached indefinitely — it loads once and never re-fetches on its own.
+To force a fresh load, invalidate the cache.
+
+```ts
+const invalidate = useConfigInvalidate(appConfigLoader);
+
+invalidate.invalidate();  // marks stale → triggers a re-fetch
+invalidate.isPending      // true while re-fetching
+invalidate.isError        // true if the new load failed
+invalidate.error          // the ConfigPipelineError, if any
+```
+
+Outside a component, use the query client directly:
+
+```ts
+queryClient.invalidateQueries({ queryKey: appConfigLoader.queryKey });
+```
+
+---
+
+## With `useConfigQuery` — inline error state
+
+The simplest approach. `isError` / `isLoading` / `data` are handled inline —
+no boundary to reset.
+
+```tsx
+const { data, isError, error } = useConfigQuery(appConfigLoader);
+const invalidate = useConfigInvalidate(appConfigLoader);
+
+{isError && (
+  <button onClick={() => invalidate.invalidate()}>Retry</button>
+)}
+```
+
+<Canvas of={Stories.Inline} />
+
+---
+
+## With `useConfigSuspenseQuery` — `QueryErrorResetBoundary`
+
+When using Suspense, an `<ErrorBoundary>` stays in its error state even after
+the config recovers — it never sees the successful re-fetch because it stopped
+rendering its children.
+
+The fix is `QueryErrorResetBoundary` from TanStack Query. It provides a `reset`
+function that clears TanStack's internal error state. Wire it to the boundary's
+`onReset` so both reset together when the user retries.
+
+```tsx
+import { QueryErrorResetBoundary } from '@tanstack/react-query';
+
+<QueryErrorResetBoundary>
+  {({ reset }) => (
+    <ErrorBoundary
+      onReset={reset}
+      fallback={(error, resetBoundary) => (
+        <div>
+          <p>{error.message}</p>
+          <button onClick={resetBoundary}>Retry</button>
+        </div>
+      )}
+    >
+      <Suspense fallback={<p>Loading…</p>}>
+        <ConfigDisplay />
+      </Suspense>
+    </ErrorBoundary>
+  )}
+</QueryErrorResetBoundary>
+```
+
+`resetBoundary()` calls `onReset` (which clears TanStack's error state) and
+then clears the boundary's own error state. The boundary remounts its children,
+the query re-fetches, and the Suspense fallback shows while loading.
+
+<Canvas of={Stories.WithBoundary} />

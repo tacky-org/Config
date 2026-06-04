@@ -1,4 +1,5 @@
-import { ConfigLoaderOptions } from "../Types";
+import { CONFIG_KEY_PREFIX, ConfigLoaderOptions } from "../Types";
+import { ConfigPipelineError } from "../Errors/ConfigPipelineError";
 
 const wait = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -21,20 +22,42 @@ export class ConfigLoader<TConfig, TRuntime = TConfig> {
     let lastError: unknown;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      let raw: unknown;
+
       try {
-        const raw = await this.options.load();
-        const config = this.options.validate(raw);
-        return this.options.map
-          ? this.options.map(config)
-          : (config as unknown as TRuntime);
-      } catch (err) {
-        lastError = err;
+        raw = await this.options.load();
+      } catch (cause) {
+        lastError = new ConfigPipelineError("load", cause);
         if (attempt < maxRetries) {
           await wait(200 * 2 ** attempt);
         }
+        continue;
       }
+
+      // validate and map are deterministic — do not retry, throw immediately
+      let config: TConfig;
+      try {
+        config = this.options.validate(raw);
+      } catch (cause) {
+        throw new ConfigPipelineError("validate", cause);
+      }
+
+      if (this.options.map) {
+        try {
+          return this.options.map(config);
+        } catch (cause) {
+          throw new ConfigPipelineError("map", cause);
+        }
+      }
+
+      return config as unknown as TRuntime;
     }
 
     throw lastError;
+  }
+
+  /** The TanStack Query key for this loader: `config__<key>`. */
+  get queryKey(): readonly [string] {
+    return [`${CONFIG_KEY_PREFIX}${this.options.key}`] as const;
   }
 }

@@ -2,7 +2,9 @@ import React, { Component, ReactNode } from "react";
 
 interface Props {
   children: ReactNode;
-  fallback?: ReactNode | ((error: Error) => ReactNode);
+  fallback?: ReactNode | ((error: Error, reset: () => void) => ReactNode);
+  /** Called when the boundary resets — use with QueryErrorResetBoundary. */
+  onReset?: () => void;
 }
 
 /**
@@ -17,11 +19,16 @@ export class ErrorBoundary extends Component<Props, { error: Error | null }> {
     return { error };
   }
 
+  reset = () => {
+    this.props.onReset?.();
+    this.setState({ error: null });
+  };
+
   render() {
     const { error } = this.state;
     if (error) {
       const { fallback } = this.props;
-      if (typeof fallback === "function") return fallback(error);
+      if (typeof fallback === "function") return fallback(error as Error, this.reset);
       if (fallback !== undefined) return fallback;
       return <p style={{ color: "red" }}>Error: {(error as Error).message}</p>;
     }

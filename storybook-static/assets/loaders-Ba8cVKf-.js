@@ -1,0 +1,1 @@
+function i(r,n={}){const{errorPrefix:o,...e}=n;return()=>fetch(r,e).then(t=>{if(!t.ok){const f=o??r;throw new Error(`${f}: HTTP ${t.status}`)}return t.json()})}function c(r){return()=>r}export{i as a,c as f};

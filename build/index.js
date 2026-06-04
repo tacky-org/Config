@@ -1,7 +1,24 @@
-import { queryOptions } from '@tanstack/react-query';
+import { queryOptions, useQuery, useSuspenseQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 
 var __defProp = Object.defineProperty;
 var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
+
+// src/Types.ts
+var CONFIG_KEY_PREFIX = "config__";
+
+// src/Errors/ConfigPipelineError.ts
+var _ConfigPipelineError = class _ConfigPipelineError extends Error {
+  constructor(step, cause) {
+    super(
+      `Config pipeline failed at step "${step}": ${cause instanceof Error ? cause.message : String(cause)}`,
+      { cause }
+    );
+    this.name = "ConfigPipelineError";
+    this.step = step;
+  }
+};
+__name(_ConfigPipelineError, "ConfigPipelineError");
+var ConfigPipelineError = _ConfigPipelineError;
 
 // src/Domain/ConfigLoader.ts
 var wait = /* @__PURE__ */ __name((ms) => new Promise((resolve) => setTimeout(resolve, ms)), "wait");
@@ -16,30 +33,85 @@ var _ConfigLoader = class _ConfigLoader {
     const maxRetries = this.options.retries ?? 0;
     let lastError;
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      let raw;
       try {
-        const raw = await this.options.load();
-        const config = this.options.validate(raw);
-        return this.options.map ? this.options.map(config) : config;
-      } catch (err) {
-        lastError = err;
+        raw = await this.options.load();
+      } catch (cause) {
+        lastError = new ConfigPipelineError("load", cause);
         if (attempt < maxRetries) {
           await wait(200 * 2 ** attempt);
         }
+        continue;
       }
+      let config;
+      try {
+        config = this.options.validate(raw);
+      } catch (cause) {
+        throw new ConfigPipelineError("validate", cause);
+      }
+      if (this.options.map) {
+        try {
+          return this.options.map(config);
+        } catch (cause) {
+          throw new ConfigPipelineError("map", cause);
+        }
+      }
+      return config;
     }
     throw lastError;
+  }
+  /** The TanStack Query key for this loader: `config__<key>`. */
+  get queryKey() {
+    return [`${CONFIG_KEY_PREFIX}${this.options.key}`];
   }
 };
 __name(_ConfigLoader, "ConfigLoader");
 var ConfigLoader = _ConfigLoader;
-function createConfigQuery(id, loader, options = {}) {
+function createConfigQuery(loader, options = {}) {
   return queryOptions({
-    queryKey: [id],
+    queryKey: loader.queryKey,
     queryFn: /* @__PURE__ */ __name(() => loader.load(), "queryFn"),
     staleTime: options.staleTime ?? Infinity
   });
 }
 __name(createConfigQuery, "createConfigQuery");
+
+// src/Query/prefetchConfig.ts
+function prefetchConfig(loader, queryClient) {
+  return queryClient.ensureQueryData(createConfigQuery(loader));
+}
+__name(prefetchConfig, "prefetchConfig");
+function useConfigQuery(loader) {
+  return useQuery({
+    queryKey: loader.queryKey,
+    queryFn: /* @__PURE__ */ __name(() => loader.load(), "queryFn"),
+    staleTime: Infinity
+  });
+}
+__name(useConfigQuery, "useConfigQuery");
+function useConfigSuspenseQuery(loader) {
+  return useSuspenseQuery({
+    queryKey: loader.queryKey,
+    queryFn: /* @__PURE__ */ __name(() => loader.load(), "queryFn"),
+    staleTime: Infinity
+  });
+}
+__name(useConfigSuspenseQuery, "useConfigSuspenseQuery");
+function useConfigInvalidate(loader) {
+  const queryClient = useQueryClient();
+  const { mutate, isPending, isError, isSuccess, error, reset } = useMutation({
+    mutationFn: /* @__PURE__ */ __name(() => queryClient.invalidateQueries({ queryKey: loader.queryKey }), "mutationFn")
+  });
+  return {
+    invalidate: /* @__PURE__ */ __name(() => mutate(), "invalidate"),
+    isPending,
+    isError,
+    isSuccess,
+    error,
+    reset
+  };
+}
+__name(useConfigInvalidate, "useConfigInvalidate");
 
 // src/Adapters/loaders.ts
 function fromFetch(url, options = {}) {
@@ -89,57 +161,6 @@ function fromScript(id) {
   };
 }
 __name(fromScript, "fromScript");
-function fromJsonFile(path) {
-  return async () => {
-    const { readFile } = await import('fs/promises');
-    let raw;
-    try {
-      raw = await readFile(path, "utf8");
-    } catch {
-      throw new Error(`Config file not found: ${path}`);
-    }
-    try {
-      return JSON.parse(raw);
-    } catch {
-      throw new Error(`Config file contains invalid JSON: ${path}`);
-    }
-  };
-}
-__name(fromJsonFile, "fromJsonFile");
-function fromEnv(keys) {
-  return () => {
-    const result = {};
-    const missing = [];
-    for (const key of keys) {
-      const value = process.env[key];
-      if (value === void 0) {
-        missing.push(key);
-      } else {
-        result[key] = value;
-      }
-    }
-    if (missing.length > 0) {
-      throw new Error(`Missing environment variables: ${missing.join(", ")}`);
-    }
-    return result;
-  };
-}
-__name(fromEnv, "fromEnv");
-function fromPublicEnv(prefix) {
-  return () => {
-    const result = {};
-    for (const [key, value] of Object.entries(process.env)) {
-      if (key.startsWith(prefix) && value !== void 0) {
-        result[key.slice(prefix.length)] = value;
-      }
-    }
-    if (Object.keys(result).length === 0) {
-      throw new Error(`No environment variables found with prefix "${prefix}"`);
-    }
-    return result;
-  };
-}
-__name(fromPublicEnv, "fromPublicEnv");
 function fromMemory(value) {
   return () => value;
 }
@@ -167,6 +188,6 @@ function withValibot(parser) {
 }
 __name(withValibot, "withValibot");
 
-export { ConfigLoader, createConfigQuery, fromEnv, fromFetch, fromJsonFile, fromMemory, fromPublicEnv, fromScript, fromStorage, fromWindow, withJoi, withValibot, withYup, withZod };
+export { CONFIG_KEY_PREFIX, ConfigLoader, ConfigPipelineError, createConfigQuery, fromFetch, fromMemory, fromScript, fromStorage, fromWindow, prefetchConfig, useConfigInvalidate, useConfigQuery, useConfigSuspenseQuery, withJoi, withValibot, withYup, withZod };
 //# sourceMappingURL=index.js.map
 //# sourceMappingURL=index.js.map

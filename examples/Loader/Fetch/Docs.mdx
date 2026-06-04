@@ -1,0 +1,43 @@
+import { Canvas, Meta } from "@storybook/addon-docs/blocks";
+import * as Stories from "./Fetch.stories";
+
+<Meta of={Stories} />
+
+# `fromFetch`
+
+Fetches a JSON endpoint. Throws a `ConfigPipelineError('load', ...)` on network
+failures or non-2xx responses.
+
+```ts
+import { ConfigLoader, fromFetch } from '@tacky-org/config';
+
+const appConfigLoader = ConfigLoader.create({
+  key:      'app_config',
+  load:     fromFetch('/api/config'),
+  validate: withZod(AppConfigSchema),
+});
+```
+
+Pass standard `RequestInit` options for auth headers, CORS mode, etc.:
+
+```ts
+fromFetch('/api/config', {
+  headers: { Authorization: `Bearer ${token}` },
+})
+```
+
+### Retries
+
+Use the `retries` option for transient network failures.
+Only the `load` step is retried — `validate` and `map` failures throw immediately.
+
+```ts
+const appConfigLoader = ConfigLoader.create({
+  key:     'app_config',
+  load:    fromFetch('/api/config'),
+  validate: withZod(AppConfigSchema),
+  retries: 3,  // retries with exponential backoff: 200ms, 400ms, 800ms
+});
+```
+
+<Canvas of={Stories.Standard} />

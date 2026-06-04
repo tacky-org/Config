@@ -1,6 +1,5 @@
 import { queryOptions } from "@tanstack/react-query";
 import { ConfigLoader } from "@/Domain/ConfigLoader";
-import { ResolveConfig } from "@/Types";
 
 export interface CreateConfigQueryOptions {
   /**
@@ -12,23 +11,24 @@ export interface CreateConfigQueryOptions {
 
 /**
  * Wraps a ConfigLoader into a TanStack Query options object.
- * Pass the result directly to useQuery or useSuspenseQuery.
+ * The query key is derived from the loader's key.
+ *
+ * Useful for advanced TanStack patterns (prefetching, queryClient.fetchQuery, etc.).
+ * For component usage prefer useConfigQuery or useConfigSuspenseQuery directly.
  *
  * @example
- * const appConfigQuery = createConfigQuery('app_config', appConfigLoader);
+ * const appConfigQuery = createConfigQuery(appConfigLoader);
  *
- * // anywhere in your component tree:
- * const { data: config } = useQuery(appConfigQuery);
- * const { data: config } = useSuspenseQuery(appConfigQuery);
+ * // prefetch outside a component:
+ * await queryClient.prefetchQuery(appConfigQuery);
  */
-export function createConfigQuery<TConfig, TRuntime, K extends string = string>(
-  id: K,
+export function createConfigQuery<TConfig, TRuntime>(
   loader: ConfigLoader<TConfig, TRuntime>,
   options: CreateConfigQueryOptions = {},
 ) {
-  return queryOptions<ResolveConfig<K, TRuntime>>({
-    queryKey: [id] as const,
-    queryFn: () => loader.load() as Promise<ResolveConfig<K, TRuntime>>,
+  return queryOptions({
+    queryKey: loader.queryKey,
+    queryFn: () => loader.load(),
     staleTime: options.staleTime ?? Infinity,
   });
 }

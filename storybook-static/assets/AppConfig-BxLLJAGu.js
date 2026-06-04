@@ -1,0 +1,1 @@
+function t(e){const o=e;if(typeof(o==null?void 0:o.apiUrl)!="string")throw new Error("Invalid apiUrl");if(typeof(o==null?void 0:o.timeout)!="number")throw new Error("Invalid timeout");if(typeof(o==null?void 0:o.darkMode)!="boolean")throw new Error("Invalid darkMode");return o}const r={apiUrl:"https://api.example.com",timeout:3e3,darkMode:!1};export{r as S,t as v};

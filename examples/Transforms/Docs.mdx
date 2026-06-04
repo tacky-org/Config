@@ -1,0 +1,38 @@
+import { Canvas, Meta } from "@storybook/addon-docs/blocks";
+import * as Stories from "./Transforms.stories";
+
+<Meta of={Stories} />
+
+# `map`
+
+Use `map` when the shape you want to work with in components differs from the
+raw JSON returned by the config source.
+
+Config is **readonly** — there is no `unmap`. The full pipeline is:
+
+`load → validate → map → TRuntime`
+
+```ts
+interface RawConfig  { api_url: string; feature_flags: string[] }
+interface AppConfig  { apiUrl: string; features: Set<string>; hasFeature(f: string): boolean }
+
+const appConfigLoader = ConfigLoader.create<RawConfig, AppConfig>({
+  key:      'app_config',
+  load:     fromFetch('/api/config'),
+  validate: withZod(RawConfigSchema),
+
+  map: ({ api_url, feature_flags }) => {
+    const features = new Set(feature_flags);
+    return {
+      apiUrl:     api_url,
+      features,
+      hasFeature: (flag) => features.has(flag),
+    };
+  },
+});
+```
+
+The raw JSON (`api_url`, `feature_flags`) is only ever referenced in `validate`
+and `map`. Components only see the clean runtime shape.
+
+<Canvas of={Stories.MapTransform} />

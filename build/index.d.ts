@@ -1,21 +1,25 @@
 import * as _tanstack_query_core from '@tanstack/query-core';
 import * as _tanstack_react_query from '@tanstack/react-query';
+import { QueryClient } from '@tanstack/react-query';
 
+/** The prefix applied to every TanStack Query key. */
+declare const CONFIG_KEY_PREFIX: "config__";
 interface ConfigLoaderOptions<TConfig, TRuntime = TConfig> {
+    /** Identifier for this loader — used as the TanStack Query key (`config__<key>`). */
+    key: string;
     load: () => unknown | Promise<unknown>;
     validate: (raw: unknown) => TConfig;
     map?: (config: TConfig) => TRuntime;
     /**
      * Number of times to retry the load before giving up.
      * Each retry waits 200ms * 2^attempt (exponential backoff).
-     * Note: TanStack's own `retry` option retries the full queryFn.
-     * This retries only the load() call, before validate/map run.
+     * Only the load() step is retried — validate and map failures throw immediately.
      * Defaults to 0.
      */
     retries?: number;
 }
 /**
- * Extend via declaration merging to get compile-time type safety on query ids.
+ * Extend via declaration merging to get compile-time type safety on config keys.
  *
  * @example
  * // your-app/config.d.ts
@@ -29,7 +33,7 @@ interface ConfigLoaderOptions<TConfig, TRuntime = TConfig> {
 interface ConfigRegistry {
 }
 /**
- * Resolves to ConfigRegistry[K] when K is a registered id,
+ * Resolves to ConfigRegistry[K] when K is a registered key,
  * otherwise falls back to TFallback.
  */
 type ResolveConfig<K extends string, TFallback = unknown> = K extends keyof ConfigRegistry ? ConfigRegistry[K] : TFallback;
@@ -39,6 +43,27 @@ declare class ConfigLoader<TConfig, TRuntime = TConfig> {
     constructor(options: ConfigLoaderOptions<TConfig, TRuntime>);
     static create<TConfig, TRuntime = TConfig>(options: ConfigLoaderOptions<TConfig, TRuntime>): ConfigLoader<TConfig, TRuntime>;
     load(): Promise<TRuntime>;
+    /** The TanStack Query key for this loader: `config__<key>`. */
+    get queryKey(): readonly [string];
+}
+
+type ConfigPipelineStep = "load" | "validate" | "map";
+/**
+ * Thrown when any step of the ConfigLoader pipeline fails.
+ * Inspect `step` to know where the failure occurred and `cause` for the original error.
+ *
+ * @example
+ * try {
+ *   await loader.load();
+ * } catch (err) {
+ *   if (err instanceof ConfigPipelineError) {
+ *     console.error(`Failed at step "${err.step}":`, err.cause);
+ *   }
+ * }
+ */
+declare class ConfigPipelineError extends Error {
+    readonly step: ConfigPipelineStep;
+    constructor(step: ConfigPipelineStep, cause: unknown);
 }
 
 interface CreateConfigQueryOptions {
@@ -50,22 +75,81 @@ interface CreateConfigQueryOptions {
 }
 /**
  * Wraps a ConfigLoader into a TanStack Query options object.
- * Pass the result directly to useQuery or useSuspenseQuery.
+ * The query key is derived from the loader's key.
+ *
+ * Useful for advanced TanStack patterns (prefetching, queryClient.fetchQuery, etc.).
+ * For component usage prefer useConfigQuery or useConfigSuspenseQuery directly.
  *
  * @example
- * const appConfigQuery = createConfigQuery('app_config', appConfigLoader);
+ * const appConfigQuery = createConfigQuery(appConfigLoader);
  *
- * // anywhere in your component tree:
- * const { data: config } = useQuery(appConfigQuery);
- * const { data: config } = useSuspenseQuery(appConfigQuery);
+ * // prefetch outside a component:
+ * await queryClient.prefetchQuery(appConfigQuery);
  */
-declare function createConfigQuery<TConfig, TRuntime, K extends string = string>(id: K, loader: ConfigLoader<TConfig, TRuntime>, options?: CreateConfigQueryOptions): _tanstack_query_core.OmitKeyof<_tanstack_react_query.UseQueryOptions<ResolveConfig<K, TRuntime>, Error, ResolveConfig<K, TRuntime>, readonly unknown[]>, "queryFn"> & {
-    queryFn?: _tanstack_query_core.QueryFunction<ResolveConfig<K, TRuntime>, readonly unknown[], never> | undefined;
+declare function createConfigQuery<TConfig, TRuntime>(loader: ConfigLoader<TConfig, TRuntime>, options?: CreateConfigQueryOptions): _tanstack_query_core.OmitKeyof<_tanstack_react_query.UseQueryOptions<TRuntime, Error, TRuntime, readonly [string]>, "queryFn"> & {
+    queryFn?: _tanstack_query_core.QueryFunction<TRuntime, readonly [string], never> | undefined;
 } & {
-    queryKey: readonly unknown[] & {
-        [dataTagSymbol]: ResolveConfig<K, TRuntime>;
+    queryKey: readonly [string] & {
+        [dataTagSymbol]: TRuntime;
         [dataTagErrorSymbol]: Error;
     };
+};
+
+/**
+ * Ensures config is in the TanStack Query cache before a route renders.
+ * Returns cached data immediately if already loaded, otherwise fetches and caches it.
+ *
+ * Use in TanStack Router's beforeLoad or loader to guarantee config is available
+ * the moment a component calls useConfigSuspenseQuery.
+ *
+ * @example
+ * // route.ts
+ * export const Route = createFileRoute('/app')({
+ *   beforeLoad: ({ context: { queryClient } }) =>
+ *     prefetchConfig(appConfigLoader, queryClient),
+ * });
+ */
+declare function prefetchConfig<TConfig, TRuntime>(loader: ConfigLoader<TConfig, TRuntime>, queryClient: QueryClient): Promise<TRuntime>;
+
+/**
+ * Reads config from a ConfigLoader.
+ * Returns isLoading, isError and error for inline state handling — no <Suspense> needed.
+ * Use useConfigSuspenseQuery when you prefer Suspense boundaries.
+ *
+ * @example
+ * const { data: config, isLoading, isError } = useConfigQuery(appConfigLoader);
+ */
+declare function useConfigQuery<TConfig, TRuntime>(loader: ConfigLoader<TConfig, TRuntime>): _tanstack_react_query.UseQueryResult<NoInfer<TRuntime>, Error>;
+
+/**
+ * Reads config from a ConfigLoader via Suspense.
+ * Must be wrapped in a <Suspense> boundary.
+ * Use useConfigQuery for inline loading/error states without Suspense.
+ *
+ * @example
+ * const { data: config } = useConfigSuspenseQuery(appConfigLoader);
+ */
+declare function useConfigSuspenseQuery<TConfig, TRuntime>(loader: ConfigLoader<TConfig, TRuntime>): _tanstack_react_query.UseSuspenseQueryResult<TRuntime, Error>;
+
+/**
+ * Returns an object with an invalidate() method and TanStack mutation status.
+ * Calling invalidate() marks the config cache as stale and triggers a fresh load.
+ *
+ * @example
+ * const invalidate = useConfigInvalidate(appConfigLoader);
+ *
+ * invalidate.invalidate();
+ * invalidate.isPending  // true while re-fetching
+ * invalidate.isError    // true if the new load failed
+ * invalidate.error      // the ConfigPipelineError, if any
+ */
+declare function useConfigInvalidate<TConfig, TRuntime>(loader: ConfigLoader<TConfig, TRuntime>): {
+    invalidate: () => void;
+    isPending: boolean;
+    isError: boolean;
+    isSuccess: boolean;
+    error: Error | null;
+    reset: () => void;
 };
 
 interface FromFetchOptions extends RequestInit {
@@ -133,44 +217,6 @@ declare function fromWindow(key: string): () => unknown;
  * });
  */
 declare function fromScript(id: string): () => unknown;
-/**
- * Creates a load function that reads and JSON-parses a file from the filesystem.
- * Node.js only. Uses `fs/promises` — throws if the file is missing or invalid JSON.
- *
- * @example
- * const loader = ConfigLoader.create({
- *   load: fromJsonFile('./config/app.config.json'),
- *   validate: withZod(AppConfigSchema),
- * });
- */
-declare function fromJsonFile(path: string): () => Promise<unknown>;
-/**
- * Creates a load function that reads a set of environment variables (Node.js).
- * Throws a single error listing all missing keys at once.
- *
- * @example
- * const loader = ConfigLoader.create({
- *   load: fromEnv(['API_URL', 'API_TIMEOUT']),
- *   validate: (raw) => raw as { API_URL: string; API_TIMEOUT: string },
- *   map: (env) => ({ apiUrl: env.API_URL, timeout: Number(env.API_TIMEOUT) }),
- * });
- */
-declare function fromEnv(keys: string[]): () => Record<string, string>;
-/**
- * Creates a load function that reads all environment variables matching a prefix.
- * Strips the prefix from the returned keys.
- * Works with Vite (VITE_), Next.js (NEXT_PUBLIC_), and similar conventions.
- *
- * @example
- * // Given: VITE_API_URL=https://api.example.com  VITE_TIMEOUT=5000
- * const loader = ConfigLoader.create({
- *   load: fromPublicEnv('VITE_'),
- *   validate: (raw) => raw as { API_URL: string; TIMEOUT: string },
- *   map: (env) => ({ apiUrl: env.API_URL, timeout: Number(env.TIMEOUT) }),
- * });
- * // Produces: { API_URL: 'https://api.example.com', TIMEOUT: '5000' }
- */
-declare function fromPublicEnv(prefix: string): () => Record<string, string>;
 /**
  * Creates a load function that returns a static in-memory value.
  * Useful for tests and Storybook where you want to provide a known config
@@ -278,4 +324,4 @@ type ValibotParser<T> = (data: unknown) => T;
  */
 declare function withValibot<T>(parser: ValibotParser<T>): (raw: unknown) => T;
 
-export { ConfigLoader, type ConfigLoaderOptions, type ConfigRegistry, type CreateConfigQueryOptions, type FromFetchOptions, type ResolveConfig, createConfigQuery, fromEnv, fromFetch, fromJsonFile, fromMemory, fromPublicEnv, fromScript, fromStorage, fromWindow, withJoi, withValibot, withYup, withZod };
+export { CONFIG_KEY_PREFIX, ConfigLoader, type ConfigLoaderOptions, ConfigPipelineError, type ConfigPipelineStep, type ConfigRegistry, type CreateConfigQueryOptions, type FromFetchOptions, type ResolveConfig, createConfigQuery, fromFetch, fromMemory, fromScript, fromStorage, fromWindow, prefetchConfig, useConfigInvalidate, useConfigQuery, useConfigSuspenseQuery, withJoi, withValibot, withYup, withZod };

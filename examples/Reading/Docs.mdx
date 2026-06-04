@@ -1,0 +1,51 @@
+import { Canvas, Meta } from "@storybook/addon-docs/blocks";
+import * as Stories from "./Reading.stories";
+
+<Meta of={Stories} />
+
+# Reading
+
+Two hooks for reading from a `ConfigLoader`, matching TanStack Query's own naming:
+
+<table>
+  <thead><tr><th>Hook</th><th>Use when</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>useConfigSuspenseQuery</code></td>
+      <td>You want Suspense — wrap with <code>&lt;Suspense&gt;</code> and <code>&lt;ErrorBoundary&gt;</code></td>
+    </tr>
+    <tr>
+      <td><code>useConfigQuery</code></td>
+      <td>You want inline loading / error states, no boundaries needed</td>
+    </tr>
+  </tbody>
+</table>
+
+Config is cached indefinitely (`staleTime: Infinity`) — it is loaded once per session
+and never re-fetched unless explicitly invalidated.
+
+## `useConfigSuspenseQuery`
+
+`data` is always `TRuntime` — the Suspense boundary guarantees the component
+only renders after the config has loaded.
+
+```tsx
+const { data: config } = useConfigSuspenseQuery(appConfigLoader);
+return <p>{config.apiUrl}</p>;
+```
+
+<Canvas of={Stories.Suspense} />
+
+## `useConfigQuery` — inline states
+
+No `<Suspense>` or `<ErrorBoundary>` needed.
+
+```tsx
+const { data: config, isLoading, isError, error } = useConfigQuery(appConfigLoader);
+
+if (isLoading) return <Spinner />;
+if (isError)   return <p>Error: {String(error)}</p>;
+return <p>{config!.apiUrl}</p>;
+```
+
+<Canvas of={Stories.Inline} />
