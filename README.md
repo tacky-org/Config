@@ -2,6 +2,22 @@
 
 Config management for React apps — a thin `load → validate → map` pipeline that plugs directly into **TanStack Query**.
 
+## Config vs Storage — which package do I need?
+
+| | `@tacky-org/config` | `@tacky-org/storage` |
+|---|---|---|
+| **Source** | Server, environment, window globals | `localStorage`, `sessionStorage` |
+| **Direction** | Read-only | Read and write |
+| **Scope** | Can vary per user, locale, or tenant via context | Always device-local — one value per key |
+| **Lifetime** | Loaded once per session, never changes unless invalidated | Changes whenever the user (or your code) writes |
+| **Use for** | API URLs, feature flags, remote config, environment settings | User preferences, UI state, last-visited, cached form data |
+
+**Use `@tacky-org/config` when** the data lives on a server or in the environment and your app only reads it.
+
+**Use `@tacky-org/storage` when** your app both reads and writes the data and it belongs to the device, not the server.
+
+---
+
 ## Why
 
 Config loading is just a data-fetch with two extra steps: you need to validate that the response matches your expected shape, and you often need to map the raw API/file format into the runtime shape your app actually uses. This package provides that pipeline. Everything else — caching, Suspense, retry, SSR hydration, devtools — is delegated to TanStack Query.
