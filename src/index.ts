@@ -4,9 +4,6 @@ export { ConfigPipelineError } from "./Errors/ConfigPipelineError";
 export type { ConfigPipelineStep } from "./Errors/ConfigPipelineError";
 
 // ─── tanstack query integration ───────────────────────────────────────────────
-export { createConfigQuery } from "./Query/createConfigQuery";
-export { prefetchConfig } from "./Query/prefetchConfig";
-export type { CreateConfigQueryOptions } from "./Query/createConfigQuery";
 export { useConfigQuery } from "./Query/useConfigQuery";
 export { useConfigSuspenseQuery } from "./Query/useConfigSuspenseQuery";
 export { useConfigInvalidate } from "./Query/useConfigInvalidate";

@@ -22,7 +22,7 @@ const PipelineFallback = ({ error }: { error: Error }) => {
   );
 };
 
-// ─── load step error ──────────────────────────────────────────────────────────
+// ─── without context — load step error ───────────────────────────────────────
 
 const loadErrorLoader = ConfigLoader.create({
   key:      "error_load",
@@ -45,7 +45,7 @@ export const LoadError = () => (
   </QueryClientProvider>
 );
 
-// ─── validate step error ──────────────────────────────────────────────────────
+// ─── without context — validate step error ────────────────────────────────────
 
 const validateErrorLoader = ConfigLoader.create({
   key:      "error_validate",
@@ -63,6 +63,40 @@ export const ValidateError = () => (
     <ErrorBoundary fallback={(e: Error) => <PipelineFallback error={e} />}>
       <Suspense fallback={<p>Loading…</p>}>
         <ValidateErrorDisplay />
+      </Suspense>
+    </ErrorBoundary>
+  </QueryClientProvider>
+);
+
+// ─── with context — load error per context variant ───────────────────────────
+
+interface TodoCtx { todoId: number }
+
+const ctxErrorLoader = ConfigLoader.create<unknown, unknown, TodoCtx>({
+  key:      (ctx) => ["error_ctx", ctx.todoId],
+  load:     (ctx) => fromFetch(`https://jsonplaceholder.typicode.com/todos/${ctx.todoId}/does-not-exist`)(),
+  validate: validateAppConfig,
+});
+
+const CtxErrorDisplay = ({ todoId }: { todoId: number }) => {
+  const { data } = useConfigSuspenseQuery(ctxErrorLoader, { todoId });
+  return <p>{String(data)}</p>;
+};
+
+const contextQueryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+export const ContextLoadError = () => (
+  <QueryClientProvider client={contextQueryClient}>
+    <p><strong>Todo #1 (404)</strong></p>
+    <ErrorBoundary fallback={(e: Error) => <PipelineFallback error={e} />}>
+      <Suspense fallback={<p>Loading…</p>}>
+        <CtxErrorDisplay todoId={1} />
+      </Suspense>
+    </ErrorBoundary>
+    <p><strong>Todo #2 (404)</strong></p>
+    <ErrorBoundary fallback={(e: Error) => <PipelineFallback error={e} />}>
+      <Suspense fallback={<p>Loading…</p>}>
+        <CtxErrorDisplay todoId={2} />
       </Suspense>
     </ErrorBoundary>
   </QueryClientProvider>

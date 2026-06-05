@@ -8,15 +8,49 @@ import * as Stories from "./Fetch.stories";
 Fetches a JSON endpoint. Throws a `ConfigPipelineError('load', ...)` on network
 failures or non-2xx responses.
 
+## Without context — static key, one shared cache entry
+
 ```ts
 import { ConfigLoader, fromFetch } from '@tacky-org/config';
 
-const appConfigLoader = ConfigLoader.create({
-  key:      'app_config',
-  load:     fromFetch('/api/config'),
-  validate: withZod(AppConfigSchema),
+const todoLoader = ConfigLoader.create<Todo>({
+  key:      'todo',
+  load:     fromFetch('https://jsonplaceholder.typicode.com/todos/1'),
+  validate: validateTodo,
 });
 ```
+
+```tsx
+const { data: todo } = useConfigSuspenseQuery(todoLoader);
+```
+
+<Canvas of={Stories.Standard} />
+
+## With context — separate cache entry per `todoId`
+
+When the URL depends on runtime values, pass a `TContext` generic. The `key`
+function must be a function — the type system prevents a static string here to
+avoid a ctx mismatch.
+
+```ts
+interface TodoCtx { todoId: number }
+
+const todoByIdLoader = ConfigLoader.create<Todo, Todo, TodoCtx>({
+  key:      (ctx) => ['todo', ctx.todoId],   // ['config__todo', 1], ['config__todo', 2], …
+  load:     (ctx) => fromFetch(`https://jsonplaceholder.typicode.com/todos/${ctx.todoId}`)(),
+  validate: validateTodo,
+});
+```
+
+```tsx
+// Each todoId gets its own cache entry — both fetch concurrently
+const { data: todo1 } = useConfigSuspenseQuery(todoByIdLoader, { todoId: 1 });
+const { data: todo2 } = useConfigSuspenseQuery(todoByIdLoader, { todoId: 2 });
+```
+
+<Canvas of={Stories.WithContext} />
+
+## Options
 
 Pass standard `RequestInit` options for auth headers, CORS mode, etc.:
 
@@ -26,18 +60,16 @@ fromFetch('/api/config', {
 })
 ```
 
-### Retries
+## Retries
 
 Use the `retries` option for transient network failures.
 Only the `load` step is retried — `validate` and `map` failures throw immediately.
 
 ```ts
-const appConfigLoader = ConfigLoader.create({
-  key:     'app_config',
-  load:    fromFetch('/api/config'),
+ConfigLoader.create({
+  key:      'app_config',
+  load:     fromFetch('/api/config'),
   validate: withZod(AppConfigSchema),
-  retries: 3,  // retries with exponential backoff: 200ms, 400ms, 800ms
+  retries:  3,  // 200ms, 400ms, 800ms backoff
 });
 ```
-
-<Canvas of={Stories.Standard} />

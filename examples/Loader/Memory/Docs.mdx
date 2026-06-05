@@ -8,23 +8,52 @@ import * as Stories from "./Memory.stories";
 Returns a static in-memory value. No network, no filesystem.
 The go-to loader for **tests** and **Storybook**.
 
+## Without context — static value, one shared cache entry
+
 ```ts
 import { ConfigLoader, fromMemory } from '@tacky-org/config';
 
-const appConfigLoader = ConfigLoader.create({
+const appConfigLoader = ConfigLoader.create<AppConfig>({
   key:      'app_config',
   load:     fromMemory({ apiUrl: 'https://api.example.com', timeout: 3000, darkMode: false }),
-  validate: withZod(AppConfigSchema),
+  validate: validateAppConfig,
 });
 ```
 
-```ts
-// In tests — swap the loader for a known value without mocking fetch
-const testLoader = ConfigLoader.create({
-  key:      'app_config',
-  load:     fromMemory({ apiUrl: 'http://localhost', timeout: 100, darkMode: true }),
-  validate: withZod(AppConfigSchema),
-});
+```tsx
+const { data: config } = useConfigSuspenseQuery(appConfigLoader);
 ```
 
 <Canvas of={Stories.Standard} />
+
+## With context — separate cache entry per theme
+
+```ts
+interface ThemeCtx { darkMode: boolean }
+
+const themedConfigLoader = ConfigLoader.create<AppConfig, AppConfig, ThemeCtx>({
+  key:      (ctx) => ['app_config', ctx.darkMode ? 'dark' : 'light'],
+  load:     (ctx) => fromMemory({ ...baseConfig, darkMode: ctx.darkMode })(),
+  validate: validateAppConfig,
+});
+```
+
+```tsx
+// Each theme variant is cached independently
+const { data: light } = useConfigSuspenseQuery(themedConfigLoader, { darkMode: false });
+const { data: dark  } = useConfigSuspenseQuery(themedConfigLoader, { darkMode: true });
+```
+
+<Canvas of={Stories.WithContext} />
+
+## Tests
+
+Swap the loader for a known value without mocking fetch:
+
+```ts
+const testLoader = ConfigLoader.create<AppConfig>({
+  key:      'app_config',
+  load:     fromMemory({ apiUrl: 'http://localhost', timeout: 100, darkMode: true }),
+  validate: validateAppConfig,
+});
+```

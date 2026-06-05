@@ -12,19 +12,21 @@ Config is **readonly** — there is no `unmap`. The full pipeline is:
 
 `load → validate → map → TRuntime`
 
-```ts
-interface RawConfig  { api_url: string; feature_flags: string[] }
-interface AppConfig  { apiUrl: string; features: Set<string>; hasFeature(f: string): boolean }
+---
 
-const appConfigLoader = ConfigLoader.create<RawConfig, AppConfig>({
+## Without context
+
+```ts
+const configLoader = ConfigLoader.create<RawConfig, AppConfig>({
   key:      'app_config',
   load:     fromFetch('/api/config'),
   validate: withZod(RawConfigSchema),
 
-  map: ({ api_url, feature_flags }) => {
+  map: ({ api_url, timeout_ms, feature_flags }) => {
     const features = new Set(feature_flags);
     return {
       apiUrl:     api_url,
+      timeout:    timeout_ms,
       features,
       hasFeature: (flag) => features.has(flag),
     };
@@ -36,3 +38,29 @@ The raw JSON (`api_url`, `feature_flags`) is only ever referenced in `validate`
 and `map`. Components only see the clean runtime shape.
 
 <Canvas of={Stories.MapTransform} />
+
+## With context — feature flags vary by environment
+
+The same `map` function applies regardless of context — `map` is always `TConfig → TRuntime`.
+The ctx is used in `load` to fetch the right raw data per environment.
+
+```ts
+interface EnvCtx { env: 'production' | 'staging' }
+
+const configLoader = ConfigLoader.create<RawConfig, AppConfig, EnvCtx>({
+  key:      (ctx) => ['app_config', ctx.env],
+  load:     (ctx) => fromFetch(`/api/config?env=${ctx.env}`)(),
+  validate: withZod(RawConfigSchema),
+  map:      ({ api_url, timeout_ms, feature_flags }) => {
+    const features = new Set(feature_flags);
+    return { apiUrl: api_url, timeout: timeout_ms, features, hasFeature: (f) => features.has(f) };
+  },
+});
+```
+
+```tsx
+const { data: config } = useConfigSuspenseQuery(configLoader, { env: 'staging' });
+config.hasFeature('beta'); // true in staging, false in production
+```
+
+<Canvas of={Stories.WithContext} />

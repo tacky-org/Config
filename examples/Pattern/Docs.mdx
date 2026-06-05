@@ -5,32 +5,27 @@ import * as Stories from "./Pattern.stories";
 
 # App structure pattern
 
-The recommended pattern is a `configs/` folder with one file per config.
+The recommended pattern is a `configs/` folder with one file per loader.
 Each file exports the loader. Components import it directly — no prop drilling, no context.
 
 ```
 src/
   configs/
     appConfig.ts
-    featureFlags.ts
+    langConfig.ts
   components/
     ApiStatus.tsx
-    FeatureGate.tsx
+    TimeoutBadge.tsx
 ```
 
-## `configs/appConfig.ts`
+---
+
+## Without context
+
+### `configs/appConfig.ts`
 
 ```ts
-import { ConfigLoader, fromFetch } from '@tacky-org/config';
-import { z } from 'zod';
-
-const AppConfigSchema = z.object({
-  apiUrl:   z.string().url(),
-  timeout:  z.number(),
-  darkMode: z.boolean(),
-});
-
-type AppConfig = z.infer<typeof AppConfigSchema>;
+import { ConfigLoader, fromFetch, withZod } from '@tacky-org/config';
 
 export const appConfigLoader = ConfigLoader.create<AppConfig>({
   key:      'app_config',
@@ -39,47 +34,60 @@ export const appConfigLoader = ConfigLoader.create<AppConfig>({
 });
 ```
 
-## `components/ApiStatus.tsx`
+### Components
 
 ```tsx
-import { useConfigSuspenseQuery } from '@tacky-org/config';
-import { appConfigLoader } from '../configs/appConfig';
+// ApiStatus.tsx
+const { data: config } = useConfigSuspenseQuery(appConfigLoader);
 
-export function ApiStatus() {
-  const { data: config } = useConfigSuspenseQuery(appConfigLoader);
-  return <p>Connected to: {config.apiUrl}</p>;
-}
+// TimeoutBadge.tsx
+const { data: config } = useConfigSuspenseQuery(appConfigLoader);
 ```
 
 Any number of components can import the same loader. The config is fetched once
 and cached indefinitely — no duplicate requests.
 
-## TanStack Router — `beforeLoad`
+<Canvas of={Stories.Standard} />
 
-Use `prefetchConfig` in `beforeLoad` or `loader` to ensure config is in the cache
-before the route renders. Components calling `useConfigSuspenseQuery` will never
-suspend — the data is already there.
+---
+
+## With context
+
+### `configs/langConfig.ts`
 
 ```ts
-import { createRootRouteWithContext } from '@tanstack/react-router';
-import { QueryClient } from '@tanstack/react-query';
-import { prefetchConfig } from '@tacky-org/config';
-import { appConfigLoader } from '../configs/appConfig';
+interface LangCtx { language: string }
 
-export const Route = createFileRoute('/app')({
-  beforeLoad: ({ context: { queryClient } }) =>
-    prefetchConfig(appConfigLoader, queryClient),
+export const langConfigLoader = ConfigLoader.create<AppConfig, AppConfig, LangCtx>({
+  key:  (ctx) => ['lang_config', ctx.language],
+  load: (ctx) => fromFetch('/api/config', {
+    headers: { 'Accept-Language': ctx.language },
+  })(),
+  validate: withZod(AppConfigSchema),
 });
 ```
 
-Multiple loaders in parallel:
+### Components
 
-```ts
-beforeLoad: ({ context: { queryClient } }) =>
-  Promise.all([
-    prefetchConfig(appConfigLoader,    queryClient),
-    prefetchConfig(featureFlagsLoader, queryClient),
-  ]),
+Each component passes ctx as the second argument — the type system requires it:
+
+```tsx
+// ApiStatusLocalized.tsx
+const { data: config } = useConfigSuspenseQuery(langConfigLoader, { language });
+
+// TimeoutBadgeLocalized.tsx
+const { data: config } = useConfigSuspenseQuery(langConfigLoader, { language });
 ```
 
-<Canvas of={Stories.Standard} />
+Multiple components using the same loader + same ctx share a single cache entry — no duplicate requests.
+
+### TanStack Router — prefetch in `loader`
+
+```ts
+export const Route = createFileRoute('/app')({
+  loader: ({ context: { queryClient }, search }) =>
+    queryClient.prefetchQuery(langConfigLoader.queryOptions({ language: search.lang })),
+});
+```
+
+<Canvas of={Stories.WithContext} />

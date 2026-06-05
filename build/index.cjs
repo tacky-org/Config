@@ -31,13 +31,22 @@ var _ConfigLoader = class _ConfigLoader {
   static create(options) {
     return new _ConfigLoader(options);
   }
-  async load() {
+  /**
+   * Executes the load pipeline: fetch → validate → map.
+   * Named to mirror the `queryFn` concept in TanStack Query.
+   *
+   * @example
+   * await appConfigLoader.queryFn();
+   * await todoLoader.queryFn({ language: 'en' });
+   */
+  async queryFn(...[ctx]) {
+    const resolvedCtx = ctx;
     const maxRetries = this.options.retries ?? 0;
     let lastError;
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       let raw;
       try {
-        raw = await this.options.load();
+        raw = await this.options.load(resolvedCtx);
       } catch (cause) {
         lastError = new ConfigPipelineError("load", cause);
         if (attempt < maxRetries) {
@@ -62,47 +71,76 @@ var _ConfigLoader = class _ConfigLoader {
     }
     throw lastError;
   }
-  /** The TanStack Query key for this loader: `config__<key>`. */
-  get queryKey() {
-    return [`${CONFIG_KEY_PREFIX}${this.options.key}`];
+  /**
+   * TanStack Query key for this loader, derived from the `key` option.
+   * Pass context when TContext is not void to get the full specific key.
+   * Omit context to get the base key for prefix-matching (e.g. invalidate all variants).
+   *
+   * @example
+   * appConfigLoader.queryKey()                  // ['config__app']
+   * todoLoader.queryKey({ language: 'en' })     // ['config__todo', 'en']
+   * todoLoader.queryKey()                       // ['config__todo']  — matches all variants
+   */
+  queryKey(...[ctx]) {
+    const resolvedCtx = ctx;
+    const { key } = this.options;
+    if (typeof key === "string") {
+      return [`${CONFIG_KEY_PREFIX}${key}`];
+    }
+    if (resolvedCtx === void 0) {
+      return [`${CONFIG_KEY_PREFIX}`];
+    }
+    const result = key(resolvedCtx);
+    if (typeof result === "string") {
+      return [`${CONFIG_KEY_PREFIX}${result}`];
+    }
+    const [name, ...rest] = result;
+    return [`${CONFIG_KEY_PREFIX}${name}`, ...rest];
+  }
+  /**
+   * Returns a TanStack `queryOptions` object ready to pass to `queryClient` methods
+   * or `useQuery` / `useSuspenseQuery` directly.
+   * Named to mirror TanStack Query's own `queryOptions()` helper.
+   *
+   * @example
+   * // outside a component
+   * await queryClient.prefetchQuery(appConfigLoader.queryOptions());
+   * await queryClient.ensureQueryData(todoLoader.queryOptions({ language: 'en' }));
+   * await queryClient.invalidateQueries(todoLoader.queryOptions({ language: 'en' }));
+   *
+   * // invalidate all variants at once
+   * await queryClient.invalidateQueries({ queryKey: todoLoader.queryKey() });
+   *
+   * // inside a component (hooks are usually cleaner)
+   * const { data } = useSuspenseQuery(appConfigLoader.queryOptions());
+   */
+  queryOptions(...[ctx]) {
+    const resolvedCtx = ctx;
+    return reactQuery.queryOptions({
+      queryKey: this.queryKey(...[resolvedCtx]),
+      queryFn: /* @__PURE__ */ __name(() => this.queryFn(...[resolvedCtx]), "queryFn"),
+      staleTime: Infinity
+    });
   }
 };
 __name(_ConfigLoader, "ConfigLoader");
 var ConfigLoader = _ConfigLoader;
-function createConfigQuery(loader, options = {}) {
-  return reactQuery.queryOptions({
-    queryKey: loader.queryKey,
-    queryFn: /* @__PURE__ */ __name(() => loader.load(), "queryFn"),
-    staleTime: options.staleTime ?? Infinity
-  });
-}
-__name(createConfigQuery, "createConfigQuery");
-
-// src/Query/prefetchConfig.ts
-function prefetchConfig(loader, queryClient) {
-  return queryClient.ensureQueryData(createConfigQuery(loader));
-}
-__name(prefetchConfig, "prefetchConfig");
-function useConfigQuery(loader) {
-  return reactQuery.useQuery({
-    queryKey: loader.queryKey,
-    queryFn: /* @__PURE__ */ __name(() => loader.load(), "queryFn"),
-    staleTime: Infinity
-  });
+function useConfigQuery(loader, ...[ctx]) {
+  return reactQuery.useQuery(loader.queryOptions(...[ctx]));
 }
 __name(useConfigQuery, "useConfigQuery");
-function useConfigSuspenseQuery(loader) {
-  return reactQuery.useSuspenseQuery({
-    queryKey: loader.queryKey,
-    queryFn: /* @__PURE__ */ __name(() => loader.load(), "queryFn"),
-    staleTime: Infinity
-  });
+function useConfigSuspenseQuery(loader, ...[ctx]) {
+  return reactQuery.useSuspenseQuery(
+    loader.queryOptions(...[ctx])
+  );
 }
 __name(useConfigSuspenseQuery, "useConfigSuspenseQuery");
-function useConfigInvalidate(loader) {
+function useConfigInvalidate(loader, ...[ctx]) {
   const queryClient = reactQuery.useQueryClient();
   const { mutate, isPending, isError, isSuccess, error, reset } = reactQuery.useMutation({
-    mutationFn: /* @__PURE__ */ __name(() => queryClient.invalidateQueries({ queryKey: loader.queryKey }), "mutationFn")
+    mutationFn: /* @__PURE__ */ __name(() => queryClient.invalidateQueries({
+      queryKey: loader.queryKey(...[ctx])
+    }), "mutationFn")
   });
   return {
     invalidate: /* @__PURE__ */ __name(() => mutate(), "invalidate"),
@@ -193,13 +231,11 @@ __name(withValibot, "withValibot");
 exports.CONFIG_KEY_PREFIX = CONFIG_KEY_PREFIX;
 exports.ConfigLoader = ConfigLoader;
 exports.ConfigPipelineError = ConfigPipelineError;
-exports.createConfigQuery = createConfigQuery;
 exports.fromFetch = fromFetch;
 exports.fromMemory = fromMemory;
 exports.fromScript = fromScript;
 exports.fromStorage = fromStorage;
 exports.fromWindow = fromWindow;
-exports.prefetchConfig = prefetchConfig;
 exports.useConfigInvalidate = useConfigInvalidate;
 exports.useConfigQuery = useConfigQuery;
 exports.useConfigSuspenseQuery = useConfigSuspenseQuery;

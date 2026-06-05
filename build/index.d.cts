@@ -1,13 +1,46 @@
 import * as _tanstack_query_core from '@tanstack/query-core';
 import * as _tanstack_react_query from '@tanstack/react-query';
-import { QueryClient } from '@tanstack/react-query';
 
 /** The prefix applied to every TanStack Query key. */
 declare const CONFIG_KEY_PREFIX: "config__";
-interface ConfigLoaderOptions<TConfig, TRuntime = TConfig> {
-    /** Identifier for this loader — used as the TanStack Query key (`config__<key>`). */
-    key: string;
-    load: () => unknown | Promise<unknown>;
+interface ConfigLoaderOptions<TConfig, TRuntime = TConfig, TContext = void> {
+    /**
+     * Identifies this loader and controls its TanStack Query cache key.
+     *
+     * When TContext is void a static string is accepted — one shared cache entry.
+     * When TContext is provided the key MUST be a function so the cache key always
+     * reflects the context, preventing different contexts from sharing a cache entry.
+     *
+     * Return a string for a fully dynamic key, or a tuple `[name, ...segments]`
+     * to keep the name fixed while splitting the cache by specific context fields.
+     *
+     * @example
+     * // no context — static string
+     * key: "app"
+     * // → ['config__app']
+     *
+     * // context — dynamic string
+     * key: (ctx) => `todo_${ctx.language}`
+     * // → ['config__todo_en']
+     *
+     * // context — tuple (recommended: fixed name, variable segments)
+     * key: (ctx) => ["todo", ctx.language]
+     * // → ['config__todo', 'en']
+     */
+    key: [TContext] extends [void] ? string | ((ctx: TContext) => string | readonly [string, ...unknown[]]) : (ctx: TContext) => string | readonly [string, ...unknown[]];
+    /**
+     * Function that performs the actual data fetching.
+     * Receives context at load time, allowing URLs, headers, or storage keys
+     * to be derived dynamically.
+     *
+     * @example
+     * // no context (TContext = void)
+     * load: fromFetch('/api/config')
+     *
+     * // with context
+     * load: (ctx) => fromFetch(`/api/config?lang=${ctx.language}`)()
+     */
+    load: (ctx: TContext) => unknown | Promise<unknown>;
     validate: (raw: unknown) => TConfig;
     map?: (config: TConfig) => TRuntime;
     /**
@@ -38,13 +71,56 @@ interface ConfigRegistry {
  */
 type ResolveConfig<K extends string, TFallback = unknown> = K extends keyof ConfigRegistry ? ConfigRegistry[K] : TFallback;
 
-declare class ConfigLoader<TConfig, TRuntime = TConfig> {
+type ContextArg$3<TContext> = TContext extends void ? [] : [ctx: TContext];
+declare class ConfigLoader<TConfig, TRuntime = TConfig, TContext = void> {
     private readonly options;
-    constructor(options: ConfigLoaderOptions<TConfig, TRuntime>);
-    static create<TConfig, TRuntime = TConfig>(options: ConfigLoaderOptions<TConfig, TRuntime>): ConfigLoader<TConfig, TRuntime>;
-    load(): Promise<TRuntime>;
-    /** The TanStack Query key for this loader: `config__<key>`. */
-    get queryKey(): readonly [string];
+    constructor(options: ConfigLoaderOptions<TConfig, TRuntime, TContext>);
+    static create<TConfig, TRuntime = TConfig, TContext = void>(options: ConfigLoaderOptions<TConfig, TRuntime, TContext>): ConfigLoader<TConfig, TRuntime, TContext>;
+    /**
+     * Executes the load pipeline: fetch → validate → map.
+     * Named to mirror the `queryFn` concept in TanStack Query.
+     *
+     * @example
+     * await appConfigLoader.queryFn();
+     * await todoLoader.queryFn({ language: 'en' });
+     */
+    queryFn(...[ctx]: ContextArg$3<TContext>): Promise<TRuntime>;
+    /**
+     * TanStack Query key for this loader, derived from the `key` option.
+     * Pass context when TContext is not void to get the full specific key.
+     * Omit context to get the base key for prefix-matching (e.g. invalidate all variants).
+     *
+     * @example
+     * appConfigLoader.queryKey()                  // ['config__app']
+     * todoLoader.queryKey({ language: 'en' })     // ['config__todo', 'en']
+     * todoLoader.queryKey()                       // ['config__todo']  — matches all variants
+     */
+    queryKey(...[ctx]: ContextArg$3<TContext>): readonly [string, ...unknown[]];
+    /**
+     * Returns a TanStack `queryOptions` object ready to pass to `queryClient` methods
+     * or `useQuery` / `useSuspenseQuery` directly.
+     * Named to mirror TanStack Query's own `queryOptions()` helper.
+     *
+     * @example
+     * // outside a component
+     * await queryClient.prefetchQuery(appConfigLoader.queryOptions());
+     * await queryClient.ensureQueryData(todoLoader.queryOptions({ language: 'en' }));
+     * await queryClient.invalidateQueries(todoLoader.queryOptions({ language: 'en' }));
+     *
+     * // invalidate all variants at once
+     * await queryClient.invalidateQueries({ queryKey: todoLoader.queryKey() });
+     *
+     * // inside a component (hooks are usually cleaner)
+     * const { data } = useSuspenseQuery(appConfigLoader.queryOptions());
+     */
+    queryOptions(...[ctx]: ContextArg$3<TContext>): _tanstack_query_core.OmitKeyof<_tanstack_react_query.UseQueryOptions<TRuntime, Error, TRuntime, readonly [string, ...unknown[]]>, "queryFn"> & {
+        queryFn?: _tanstack_query_core.QueryFunction<TRuntime, readonly [string, ...unknown[]], never> | undefined;
+    } & {
+        queryKey: readonly [string, ...unknown[]] & {
+            [dataTagSymbol]: TRuntime;
+            [dataTagErrorSymbol]: Error;
+        };
+    };
 }
 
 type ConfigPipelineStep = "load" | "validate" | "map";
@@ -66,51 +142,7 @@ declare class ConfigPipelineError extends Error {
     constructor(step: ConfigPipelineStep, cause: unknown);
 }
 
-interface CreateConfigQueryOptions {
-    /**
-     * How long (ms) the config is considered fresh. Defaults to Infinity
-     * since config is typically static for the lifetime of a session.
-     */
-    staleTime?: number;
-}
-/**
- * Wraps a ConfigLoader into a TanStack Query options object.
- * The query key is derived from the loader's key.
- *
- * Useful for advanced TanStack patterns (prefetching, queryClient.fetchQuery, etc.).
- * For component usage prefer useConfigQuery or useConfigSuspenseQuery directly.
- *
- * @example
- * const appConfigQuery = createConfigQuery(appConfigLoader);
- *
- * // prefetch outside a component:
- * await queryClient.prefetchQuery(appConfigQuery);
- */
-declare function createConfigQuery<TConfig, TRuntime>(loader: ConfigLoader<TConfig, TRuntime>, options?: CreateConfigQueryOptions): _tanstack_query_core.OmitKeyof<_tanstack_react_query.UseQueryOptions<TRuntime, Error, TRuntime, readonly [string]>, "queryFn"> & {
-    queryFn?: _tanstack_query_core.QueryFunction<TRuntime, readonly [string], never> | undefined;
-} & {
-    queryKey: readonly [string] & {
-        [dataTagSymbol]: TRuntime;
-        [dataTagErrorSymbol]: Error;
-    };
-};
-
-/**
- * Ensures config is in the TanStack Query cache before a route renders.
- * Returns cached data immediately if already loaded, otherwise fetches and caches it.
- *
- * Use in TanStack Router's beforeLoad or loader to guarantee config is available
- * the moment a component calls useConfigSuspenseQuery.
- *
- * @example
- * // route.ts
- * export const Route = createFileRoute('/app')({
- *   beforeLoad: ({ context: { queryClient } }) =>
- *     prefetchConfig(appConfigLoader, queryClient),
- * });
- */
-declare function prefetchConfig<TConfig, TRuntime>(loader: ConfigLoader<TConfig, TRuntime>, queryClient: QueryClient): Promise<TRuntime>;
-
+type ContextArg$2<TContext> = TContext extends void ? [] : [ctx: TContext];
 /**
  * Reads config from a ConfigLoader.
  * Returns isLoading, isError and error for inline state handling — no <Suspense> needed.
@@ -118,9 +150,11 @@ declare function prefetchConfig<TConfig, TRuntime>(loader: ConfigLoader<TConfig,
  *
  * @example
  * const { data: config, isLoading, isError } = useConfigQuery(appConfigLoader);
+ * const { data } = useConfigQuery(todoLoader, { language: 'en' });
  */
-declare function useConfigQuery<TConfig, TRuntime>(loader: ConfigLoader<TConfig, TRuntime>): _tanstack_react_query.UseQueryResult<NoInfer<TRuntime>, Error>;
+declare function useConfigQuery<TConfig, TRuntime, TContext = void>(loader: ConfigLoader<TConfig, TRuntime, TContext>, ...[ctx]: ContextArg$2<TContext>): _tanstack_react_query.UseQueryResult<NoInfer<TRuntime>, Error>;
 
+type ContextArg$1<TContext> = TContext extends void ? [] : [ctx: TContext];
 /**
  * Reads config from a ConfigLoader via Suspense.
  * Must be wrapped in a <Suspense> boundary.
@@ -128,22 +162,26 @@ declare function useConfigQuery<TConfig, TRuntime>(loader: ConfigLoader<TConfig,
  *
  * @example
  * const { data: config } = useConfigSuspenseQuery(appConfigLoader);
+ * const { data } = useConfigSuspenseQuery(todoLoader, { language: 'en' });
  */
-declare function useConfigSuspenseQuery<TConfig, TRuntime>(loader: ConfigLoader<TConfig, TRuntime>): _tanstack_react_query.UseSuspenseQueryResult<TRuntime, Error>;
+declare function useConfigSuspenseQuery<TConfig, TRuntime, TContext = void>(loader: ConfigLoader<TConfig, TRuntime, TContext>, ...[ctx]: ContextArg$1<TContext>): _tanstack_react_query.UseSuspenseQueryResult<TRuntime, Error>;
 
+type ContextArg<TContext> = TContext extends void ? [] : [ctx: TContext];
 /**
  * Returns an object with an invalidate() method and TanStack mutation status.
  * Calling invalidate() marks the config cache as stale and triggers a fresh load.
  *
- * @example
- * const invalidate = useConfigInvalidate(appConfigLoader);
+ * Omit ctx to invalidate all cache entries for the loader (prefix match).
+ * Pass ctx to target a specific cache entry.
  *
- * invalidate.invalidate();
+ * @example
+ * const { invalidate } = useConfigInvalidate(appConfigLoader);
+ * const { invalidate } = useConfigInvalidate(todoLoader, { language: 'en' });
+ *
  * invalidate.isPending  // true while re-fetching
  * invalidate.isError    // true if the new load failed
- * invalidate.error      // the ConfigPipelineError, if any
  */
-declare function useConfigInvalidate<TConfig, TRuntime>(loader: ConfigLoader<TConfig, TRuntime>): {
+declare function useConfigInvalidate<TConfig, TRuntime, TContext = void>(loader: ConfigLoader<TConfig, TRuntime, TContext>, ...[ctx]: ContextArg<TContext>): {
     invalidate: () => void;
     isPending: boolean;
     isError: boolean;
@@ -163,8 +201,13 @@ interface FromFetchOptions extends RequestInit {
  * Throws on non-2xx responses so errors surface to TanStack as query errors.
  *
  * @example
- * const loader = ConfigLoader.create({
- *   load: fromFetch('/api/config'),
+ * // static
+ * ConfigLoader.create({ key: 'app', load: fromFetch('/api/config'), validate: withZod(AppConfigSchema) });
+ *
+ * // with context — call fromFetch inside the load function to use ctx values
+ * ConfigLoader.create({
+ *   key:  (ctx) => ['app', ctx.language],
+ *   load: (ctx) => fromFetch(`/api/config?lang=${ctx.language}`)(),
  *   validate: withZod(AppConfigSchema),
  * });
  */
@@ -175,16 +218,8 @@ declare function fromFetch(url: string, options?: FromFetchOptions): () => Promi
  * Throws if the key is missing or the value is invalid JSON.
  *
  * @example
- * const loader = ConfigLoader.create({
- *   load: fromStorage(localStorage, 'app_config'),
- *   validate: withZod(AppConfigSchema),
- * });
- *
- * // sessionStorage — scoped to the browser tab
- * const loader = ConfigLoader.create({
- *   load: fromStorage(sessionStorage, 'feature_flags'),
- *   validate: withZod(FeatureFlagsSchema),
- * });
+ * ConfigLoader.create({ key: 'app',   load: fromStorage(localStorage,  'app_config'),    validate: withZod(AppConfigSchema) });
+ * ConfigLoader.create({ key: 'flags', load: fromStorage(sessionStorage, 'feature_flags'), validate: withZod(FeatureFlagsSchema) });
  */
 declare function fromStorage(storage: Storage, key: string): () => unknown;
 /**
@@ -193,38 +228,28 @@ declare function fromStorage(storage: Storage, key: string): () => unknown;
  * avoiding a second network round-trip on the client.
  *
  * @example
- * // In your server-rendered HTML:
  * // <script>window.__APP_CONFIG__ = { apiUrl: "https://api.example.com" };</script>
- *
- * const loader = ConfigLoader.create({
- *   load: fromWindow('__APP_CONFIG__'),
- *   validate: withZod(AppConfigSchema),
- * });
+ * ConfigLoader.create({ key: 'app', load: fromWindow('__APP_CONFIG__'), validate: withZod(AppConfigSchema) });
  */
 declare function fromWindow(key: string): () => unknown;
 /**
  * Creates a load function that reads and JSON-parses an inline
- * <script type="application/json"> tag by its id.
+ * `<script type="application/json">` tag by its id.
  * Useful for SSR config embedding without polluting the global scope.
  *
  * @example
- * // In your server-rendered HTML:
  * // <script id="app-config" type="application/json">{"apiUrl":"https://api.example.com"}</script>
- *
- * const loader = ConfigLoader.create({
- *   load: fromScript('app-config'),
- *   validate: withZod(AppConfigSchema),
- * });
+ * ConfigLoader.create({ key: 'app', load: fromScript('app-config'), validate: withZod(AppConfigSchema) });
  */
 declare function fromScript(id: string): () => unknown;
 /**
  * Creates a load function that returns a static in-memory value.
- * Useful for tests and Storybook where you want to provide a known config
- * without any network or filesystem access.
+ * Useful for tests and Storybook where you want a known config without any network access.
  *
  * @example
- * const loader = ConfigLoader.create({
- *   load: fromMemory({ apiUrl: 'https://api.example.com', timeout: 5000 }),
+ * ConfigLoader.create({
+ *   key:      'app',
+ *   load:     fromMemory({ apiUrl: 'https://api.example.com', timeout: 5000 }),
  *   validate: withZod(AppConfigSchema),
  * });
  */
@@ -324,4 +349,4 @@ type ValibotParser<T> = (data: unknown) => T;
  */
 declare function withValibot<T>(parser: ValibotParser<T>): (raw: unknown) => T;
 
-export { CONFIG_KEY_PREFIX, ConfigLoader, type ConfigLoaderOptions, ConfigPipelineError, type ConfigPipelineStep, type ConfigRegistry, type CreateConfigQueryOptions, type FromFetchOptions, type ResolveConfig, createConfigQuery, fromFetch, fromMemory, fromScript, fromStorage, fromWindow, prefetchConfig, useConfigInvalidate, useConfigQuery, useConfigSuspenseQuery, withJoi, withValibot, withYup, withZod };
+export { CONFIG_KEY_PREFIX, ConfigLoader, type ConfigLoaderOptions, ConfigPipelineError, type ConfigPipelineStep, type ConfigRegistry, type FromFetchOptions, type ResolveConfig, fromFetch, fromMemory, fromScript, fromStorage, fromWindow, useConfigInvalidate, useConfigQuery, useConfigSuspenseQuery, withJoi, withValibot, withYup, withZod };

@@ -8,19 +8,28 @@ import * as Stories from "./Invalidate.stories";
 Config is cached indefinitely — it loads once and never re-fetches on its own.
 To force a fresh load, invalidate the cache.
 
-```ts
-const invalidate = useConfigInvalidate(appConfigLoader);
+## Inside a component — `useConfigInvalidate`
 
-invalidate.invalidate();  // marks stale → triggers a re-fetch
-invalidate.isPending      // true while re-fetching
-invalidate.isError        // true if the new load failed
-invalidate.error          // the ConfigPipelineError, if any
+```ts
+const { invalidate, isPending, isError, error } = useConfigInvalidate(appConfigLoader);
+
+invalidate();   // marks stale → triggers a re-fetch
+isPending       // true while re-fetching
+isError         // true if the new load failed
+error           // the ConfigPipelineError, if any
 ```
 
-Outside a component, use the query client directly:
+## Outside a component — `queryClient` directly
+
+Use `loader.queryOptions()` to target a specific cache entry, or `loader.queryKey()`
+for prefix-matching to invalidate all variants at once:
 
 ```ts
-queryClient.invalidateQueries({ queryKey: appConfigLoader.queryKey });
+// specific entry
+await queryClient.invalidateQueries(appConfigLoader.queryOptions());
+
+// all variants of a context-aware loader (prefix match)
+await queryClient.invalidateQueries({ queryKey: todoLoader.queryKey() });
 ```
 
 ---
@@ -32,10 +41,10 @@ no boundary to reset.
 
 ```tsx
 const { data, isError, error } = useConfigQuery(appConfigLoader);
-const invalidate = useConfigInvalidate(appConfigLoader);
+const { invalidate } = useConfigInvalidate(appConfigLoader);
 
 {isError && (
-  <button onClick={() => invalidate.invalidate()}>Retry</button>
+  <button onClick={invalidate}>Retry</button>
 )}
 ```
 

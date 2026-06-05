@@ -24,24 +24,38 @@ Two hooks for reading from a `ConfigLoader`, matching TanStack Query's own namin
 Config is cached indefinitely (`staleTime: Infinity`) — it is loaded once per session
 and never re-fetched unless explicitly invalidated.
 
-## `useConfigSuspenseQuery`
+---
+
+## `useConfigSuspenseQuery` — without context
 
 `data` is always `TRuntime` — the Suspense boundary guarantees the component
 only renders after the config has loaded.
 
 ```tsx
-const { data: config } = useConfigSuspenseQuery(appConfigLoader);
+const suspenseLoader = ConfigLoader.create<AppConfig>({
+  key:      'app',
+  load:     fromFetch('/api/config'),
+  validate: withZod(AppConfigSchema),
+});
+
+const { data: config } = useConfigSuspenseQuery(suspenseLoader);
 return <p>{config.apiUrl}</p>;
 ```
 
 <Canvas of={Stories.Suspense} />
 
-## `useConfigQuery` — inline states
+## `useConfigQuery` — without context
 
 No `<Suspense>` or `<ErrorBoundary>` needed.
 
 ```tsx
-const { data: config, isLoading, isError, error } = useConfigQuery(appConfigLoader);
+const inlineLoader = ConfigLoader.create<AppConfig>({
+  key:      'app',
+  load:     fromFetch('/api/config'),
+  validate: withZod(AppConfigSchema),
+});
+
+const { data: config, isLoading, isError, error } = useConfigQuery(inlineLoader);
 
 if (isLoading) return <Spinner />;
 if (isError)   return <p>Error: {String(error)}</p>;
@@ -49,3 +63,32 @@ return <p>{config!.apiUrl}</p>;
 ```
 
 <Canvas of={Stories.Inline} />
+
+---
+
+## `useConfigSuspenseQuery` — with context
+
+When ctx is provided it is required as the second argument — the type system enforces it.
+Each distinct context value gets its own cache entry.
+
+```tsx
+interface ThemeCtx { darkMode: boolean }
+
+const themedLoader = ConfigLoader.create<AppConfig, AppConfig, ThemeCtx>({
+  key:      (ctx) => ['app', ctx.darkMode ? 'dark' : 'light'],
+  load:     (ctx) => fromFetch(`/api/config?theme=${ctx.darkMode ? 'dark' : 'light'}`)(),
+  validate: withZod(AppConfigSchema),
+});
+
+const { data: config } = useConfigSuspenseQuery(themedLoader, { darkMode: true });
+```
+
+<Canvas of={Stories.SuspenseWithContext} />
+
+## `useConfigQuery` — with context
+
+```tsx
+const { data: config, isLoading } = useConfigQuery(themedLoader, { darkMode: false });
+```
+
+<Canvas of={Stories.InlineWithContext} />

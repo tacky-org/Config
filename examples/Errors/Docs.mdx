@@ -53,10 +53,29 @@ ConfigLoader.create({
 });
 ```
 
-## `load` step error — HTTP 404
+---
+
+## Without context — `load` step error (HTTP 404)
 
 <Canvas of={Stories.Load} />
 
-## `validate` step error — wrong shape
+## Without context — `validate` step error (wrong shape)
 
 <Canvas of={Stories.Validate} />
+
+## With context — load error per context variant
+
+Each context variant (`todoId: 1`, `todoId: 2`) has its own cache entry and its own
+error state. One failing variant does not affect the others.
+
+```ts
+interface TodoCtx { todoId: number }
+
+const loader = ConfigLoader.create<Todo, Todo, TodoCtx>({
+  key:      (ctx) => ['todo', ctx.todoId],
+  load:     (ctx) => fromFetch(`/api/todos/${ctx.todoId}`)(),
+  validate: validateTodo,
+});
+```
+
+<Canvas of={Stories.WithContext} />

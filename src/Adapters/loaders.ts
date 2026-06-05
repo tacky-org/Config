@@ -12,8 +12,13 @@ export interface FromFetchOptions extends RequestInit {
  * Throws on non-2xx responses so errors surface to TanStack as query errors.
  *
  * @example
- * const loader = ConfigLoader.create({
- *   load: fromFetch('/api/config'),
+ * // static
+ * ConfigLoader.create({ key: 'app', load: fromFetch('/api/config'), validate: withZod(AppConfigSchema) });
+ *
+ * // with context — call fromFetch inside the load function to use ctx values
+ * ConfigLoader.create({
+ *   key:  (ctx) => ['app', ctx.language],
+ *   load: (ctx) => fromFetch(`/api/config?lang=${ctx.language}`)(),
  *   validate: withZod(AppConfigSchema),
  * });
  */
@@ -40,16 +45,8 @@ export function fromFetch(
  * Throws if the key is missing or the value is invalid JSON.
  *
  * @example
- * const loader = ConfigLoader.create({
- *   load: fromStorage(localStorage, 'app_config'),
- *   validate: withZod(AppConfigSchema),
- * });
- *
- * // sessionStorage — scoped to the browser tab
- * const loader = ConfigLoader.create({
- *   load: fromStorage(sessionStorage, 'feature_flags'),
- *   validate: withZod(FeatureFlagsSchema),
- * });
+ * ConfigLoader.create({ key: 'app',   load: fromStorage(localStorage,  'app_config'),    validate: withZod(AppConfigSchema) });
+ * ConfigLoader.create({ key: 'flags', load: fromStorage(sessionStorage, 'feature_flags'), validate: withZod(FeatureFlagsSchema) });
  */
 export function fromStorage(storage: Storage, key: string): () => unknown {
   return () => {
@@ -71,13 +68,8 @@ export function fromStorage(storage: Storage, key: string): () => unknown {
  * avoiding a second network round-trip on the client.
  *
  * @example
- * // In your server-rendered HTML:
  * // <script>window.__APP_CONFIG__ = { apiUrl: "https://api.example.com" };</script>
- *
- * const loader = ConfigLoader.create({
- *   load: fromWindow('__APP_CONFIG__'),
- *   validate: withZod(AppConfigSchema),
- * });
+ * ConfigLoader.create({ key: 'app', load: fromWindow('__APP_CONFIG__'), validate: withZod(AppConfigSchema) });
  */
 export function fromWindow(key: string): () => unknown {
   return () => {
@@ -95,17 +87,12 @@ export function fromWindow(key: string): () => unknown {
 
 /**
  * Creates a load function that reads and JSON-parses an inline
- * <script type="application/json"> tag by its id.
+ * `<script type="application/json">` tag by its id.
  * Useful for SSR config embedding without polluting the global scope.
  *
  * @example
- * // In your server-rendered HTML:
  * // <script id="app-config" type="application/json">{"apiUrl":"https://api.example.com"}</script>
- *
- * const loader = ConfigLoader.create({
- *   load: fromScript('app-config'),
- *   validate: withZod(AppConfigSchema),
- * });
+ * ConfigLoader.create({ key: 'app', load: fromScript('app-config'), validate: withZod(AppConfigSchema) });
  */
 export function fromScript(id: string): () => unknown {
   return () => {
@@ -123,12 +110,12 @@ export function fromScript(id: string): () => unknown {
 
 /**
  * Creates a load function that returns a static in-memory value.
- * Useful for tests and Storybook where you want to provide a known config
- * without any network or filesystem access.
+ * Useful for tests and Storybook where you want a known config without any network access.
  *
  * @example
- * const loader = ConfigLoader.create({
- *   load: fromMemory({ apiUrl: 'https://api.example.com', timeout: 5000 }),
+ * ConfigLoader.create({
+ *   key:      'app',
+ *   load:     fromMemory({ apiUrl: 'https://api.example.com', timeout: 5000 }),
  *   validate: withZod(AppConfigSchema),
  * });
  */
