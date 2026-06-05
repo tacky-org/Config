@@ -14,6 +14,14 @@ Config loading is just a data-fetch with two extra steps: you need to validate t
 pnpm add @tacky-org/config @tanstack/react-query
 ```
 
+### Claude Code / AI assistant guidance
+
+This package ships a `CLAUDE.md` with rules and patterns for AI assistants. Add one line to your project's `CLAUDE.md` so any AI working in your codebase knows the correct API:
+
+```markdown
+@node_modules/@tacky-org/config/CLAUDE.md
+```
+
 ---
 
 ## Core concepts

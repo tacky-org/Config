@@ -1,5 +1,5 @@
 import { queryOptions } from "@tanstack/react-query";
-import { CONFIG_KEY_PREFIX, ConfigLoaderOptions } from "@/Types";
+import { CONFIG_KEY_PREFIX, ConfigLoaderOptions } from "../Types";
 import { ConfigPipelineError } from "@/Errors/ConfigPipelineError";
 
 const wait = (ms: number) =>
